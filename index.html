@@ -480,7 +480,8 @@
   }
 
   .modal-input,
-  .modal-textarea {
+  .modal-textarea,
+  select.modal-input {
     width: 100%;
     padding: 12px 14px;
     border-radius: 14px;
@@ -491,6 +492,16 @@
     outline: none;
     font-family: inherit;
     resize: vertical;
+  }
+
+  select.modal-input option {
+    color: #111;
+  }
+
+  .voice-hint {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 6px;
   }
 
   .modal-input::placeholder,
@@ -637,6 +648,14 @@
       </div>
     </div>
 
+    <label class="modal-label">読み上げ音声</label>
+    <select id="voiceGenderInput" class="modal-input">
+      <option value="auto">自動（端末のおまかせ）</option>
+      <option value="female">女性の声</option>
+      <option value="male">男性の声</option>
+    </select>
+    <div class="voice-hint" id="voiceHint">端末に入っている音声から自動で選びます</div>
+
     <label class="modal-label">当選時の掛け声（1行に1つ入力。抽選のたびランダムで読み上げます）</label>
     <textarea id="calloutInput" class="modal-textarea" rows="4" placeholder="わぁ〜い！&#10;やったー！&#10;ナイスビンゴ！"></textarea>
 
@@ -660,7 +679,8 @@
   const DEFAULT_SETTINGS = {
     title: "",
     bgColor: "#0a0c1e",
-    callouts: ["わぁ〜い！", "やったー！", "ナイスビンゴ！"]
+    callouts: ["わぁ〜い！", "やったー！", "ナイスビンゴ！"],
+    voiceGender: "auto"
   };
   let settings = loadSettings();
 
@@ -686,6 +706,7 @@
   const titleInput         = document.getElementById("titleInput");
   const bgColorInput       = document.getElementById("bgColorInput");
   const calloutInput       = document.getElementById("calloutInput");
+  const voiceGenderInput   = document.getElementById("voiceGenderInput");
   const swatches           = document.querySelectorAll(".swatch");
 
   function initPool() {
@@ -748,6 +769,7 @@
     titleInput.value = settings.title || "";
     bgColorInput.value = settings.bgColor || "#0a0c1e";
     calloutInput.value = (settings.callouts || []).join("\n");
+    voiceGenderInput.value = settings.voiceGender || "auto";
     settingsOverlay.classList.add("show");
   }
 
@@ -774,6 +796,7 @@
       .split("\n")
       .map(s => s.trim())
       .filter(s => s.length > 0);
+    settings.voiceGender = voiceGenderInput.value;
     saveSettingsToStorage();
     applySettings();
     closeSettings();
@@ -842,12 +865,58 @@
     });
   }
 
+  /* ================= 読み上げ音声（男性／女性） ================= */
+  let availableVoices = [];
+
+  function refreshVoices() {
+    if ("speechSynthesis" in window) {
+      availableVoices = window.speechSynthesis.getVoices();
+    }
+  }
+  refreshVoices();
+  if ("speechSynthesis" in window && "onvoiceschanged" in window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = refreshVoices;
+  }
+
+  const FEMALE_NAME_PATTERN = /kyoko|o-ren|oren|sayaka|haruka|female|女性/i;
+  const MALE_NAME_PATTERN   = /otoya|hattori|ichiro|male|男性/i;
+
+  function pickVoice(genderPref) {
+    if (!genderPref || genderPref === "auto") return null;
+    if (!availableVoices || availableVoices.length === 0) return null;
+
+    const jaVoices = availableVoices.filter(v => v.lang && v.lang.toLowerCase().indexOf("ja") === 0);
+    const pool = jaVoices.length > 0 ? jaVoices : availableVoices;
+
+    const pattern = genderPref === "female" ? FEMALE_NAME_PATTERN : MALE_NAME_PATTERN;
+    let match = pool.find(v => pattern.test(v.name));
+    if (match) return match;
+
+    // 名前から判別できない場合は、候補の中から順番に割り当てる（女性=1番目、男性=2番目 or 1番目）
+    if (pool.length >= 2) {
+      return genderPref === "female" ? pool[0] : pool[1];
+    }
+    return pool[0] || null;
+  }
+
+  // iOS Safari対策：タップ直後の同期呼び出しで読み上げ機能を「解放」しておく
+  function primeSpeech() {
+    if (!("speechSynthesis" in window)) return;
+    try {
+      const primer = new SpeechSynthesisUtterance("");
+      primer.volume = 0;
+      window.speechSynthesis.speak(primer);
+    } catch (e) { /* 無視 */ }
+  }
+
   function speak(text) {
     if (!("speechSynthesis" in window)) return;
     const utter = new SpeechSynthesisUtterance(text);
     utter.lang = "ja-JP";
     utter.rate = 1.0;
     utter.pitch = 1.05;
+    const voice = pickVoice(settings.voiceGender);
+    if (voice) utter.voice = voice;
     window.speechSynthesis.speak(utter);
   }
 
@@ -917,6 +986,7 @@
     drawing = true;
     drawBtn.disabled = true;
     ensureAudio();
+    primeSpeech();
 
     currentNumberEl.classList.add("rolling");
     currentNumberEl.classList.remove("win", "glow");
