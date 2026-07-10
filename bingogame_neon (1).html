@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>BINGO GAME</title>
+<style>
+  /* =========================================================
+     背景画像設定：ここを変更するだけで背景画像を差し替え可能
+     ========================================================= */
+  :root {
+    --bg-image: url("");
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+  }
+
+  body {
+    background-image: var(--bg-image);
+    background-color: #1b1e3c; /* 背景画像が無い場合のフォールバック色 */
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    position: relative;
+  }
+
+  /* 半透明レイヤー：設定で選んだ色合いをここに反映（JSでbackgroundを書き換え） */
+  .overlay-layer {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 30, 0.55);
+    z-index: 0;
+    transition: background 0.4s ease;
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: row;
+    padding: 16px;
+    gap: 16px;
+  }
+
+  /* ---------- 共通ガラス風パネル ---------- */
+  :root {
+    --accent-glow: rgba(0, 0, 0, 0);
+  }
+
+  .glass {
+    background: rgba(255, 255, 255, 0.10);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 28px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), 0 0 55px var(--accent-glow);
+    transition: box-shadow 0.4s ease;
+  }
+
+  /* ---------- 左パネル ---------- */
+  .left-panel {
+    flex: 1.1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .title {
+    font-size: clamp(28px, 4vw, 44px);
+    font-weight: 900;
+    letter-spacing: 6px;
+    color: #ffffff;
+    text-shadow: 0 0 18px rgba(255, 255, 255, 0.6), 0 2px 4px rgba(0,0,0,0.5);
+    margin-bottom: 4px;
+    max-width: 100%;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .draw-count {
+    color: rgba(255,255,255,0.85);
+    font-size: clamp(14px, 1.6vw, 18px);
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+  }
+
+  .number-stage {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    position: relative;
+  }
+
+  .letter-badge {
+    position: absolute;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: clamp(24px, 3vw, 34px);
+    font-weight: 800;
+    color: #fff;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    letter-spacing: 4px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+  }
+
+  .letter-badge.show { opacity: 1; }
+
+  #currentNumber {
+    font-size: clamp(150px, 22vw, 300px);
+    font-weight: 900;
+    color: #ffffff;
+    line-height: 1;
+    text-shadow: 0 0 30px rgba(255,255,255,0.5), 0 4px 10px rgba(0,0,0,0.6);
+    transition: transform 0.15s ease, color 0.2s ease, font-size 0.3s ease;
+  }
+
+  /* タイトル未入力時：画面を少し大きめに使う */
+  .left-panel.no-title .title {
+    display: none;
+  }
+  .left-panel.no-title .number-stage {
+    flex: 1.25;
+  }
+  .left-panel.no-title #currentNumber {
+    font-size: clamp(170px, 25vw, 340px);
+  }
+
+  #currentNumber.rolling {
+    filter: blur(1px);
+  }
+
+  #currentNumber.win {
+    animation: winPop 0.9s cubic-bezier(.36,1.5,.5,1) 1;
+  }
+
+  @keyframes winPop {
+    0%   { transform: scale(0.6); }
+    40%  { transform: scale(1.25); }
+    60%  { transform: scale(0.92); }
+    75%  { transform: scale(1.08); }
+    100% { transform: scale(1); }
+  }
+
+  .glow {
+    text-shadow:
+      0 0 20px currentColor,
+      0 0 45px currentColor,
+      0 0 80px currentColor,
+      0 4px 10px rgba(0,0,0,0.6) !important;
+  }
+
+  .controls {
+    display: flex;
+    gap: 18px;
+    width: 100%;
+    justify-content: center;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    border: none;
+    border-radius: 22px;
+    padding: 22px 30px;
+    font-size: clamp(18px, 2vw, 24px);
+    font-weight: 800;
+    color: #fff;
+    cursor: pointer;
+    min-width: 150px;
+    background: rgba(255,255,255,0.16);
+    border: 1px solid rgba(255,255,255,0.4);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.3);
+    transition: transform 0.08s ease, background 0.2s ease;
+  }
+
+  .btn:active {
+    transform: scale(0.94);
+    background: rgba(255,255,255,0.3);
+  }
+
+  .btn-draw {
+    background: linear-gradient(135deg, rgba(255,90,90,0.85), rgba(255,170,60,0.85));
+    box-shadow: 0 8px 26px rgba(255,90,90,0.45);
+    font-size: clamp(22px, 2.4vw, 28px);
+    padding: 26px 46px;
+  }
+
+  .btn-draw:disabled {
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .btn-full {
+    background: linear-gradient(135deg, rgba(120,220,160,0.75), rgba(50,170,120,0.75));
+  }
+
+  /* ---------- 右上コーナーの小さいボタン群（リセット／設定） ---------- */
+  .corner-buttons {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 40;
+    display: flex;
+    gap: 10px;
+  }
+
+  .corner-btn {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.14);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3), 0 0 20px var(--accent-glow);
+    transition: transform 0.1s ease, background 0.2s ease, box-shadow 0.4s ease;
+  }
+
+  .corner-btn:active {
+    transform: scale(0.9);
+  }
+
+  .corner-btn-reset.armed {
+    background: rgba(255, 70, 70, 0.75);
+    border-color: rgba(255,255,255,0.6);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    animation: armedPulse 0.9s ease-in-out infinite;
+  }
+
+  @keyframes armedPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(255,70,70,0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(255,70,70,0); }
+  }
+
+  /* ---------- 右パネル ---------- */
+  .right-panel {
+    flex: 0.85;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    min-width: 260px;
+  }
+
+  .right-header {
+    color: #fff;
+    font-size: clamp(18px, 2vw, 24px);
+    font-weight: 800;
+    letter-spacing: 3px;
+    text-align: center;
+    margin-bottom: 12px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.4);
+  }
+
+  /* ---------- 検索ボックス ---------- */
+  .search-box {
+    margin-bottom: 6px;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 12px 16px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    outline: none;
+  }
+
+  .search-input::placeholder {
+    color: rgba(255,255,255,0.55);
+    font-weight: 500;
+  }
+
+  .search-status {
+    min-height: 20px;
+    font-size: 14px;
+    font-weight: 700;
+    text-align: center;
+    margin: 6px 0 10px 0;
+    color: rgba(255,255,255,0.85);
+  }
+
+  .search-status.found { color: #a5d6a7; }
+  .search-status.notfound { color: #ffcc80; }
+  .search-status.warn { color: #ef9a9a; }
+
+  .bingo-columns {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px 8px 4px;
+    color: rgba(255,255,255,0.7);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+
+  .history-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding-right: 4px;
+  }
+
+  .history-list::-webkit-scrollbar { width: 6px; }
+  .history-list::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.35);
+    border-radius: 3px;
+  }
+
+  .ball {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 16px;
+    border-radius: 18px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    animation: slideIn 0.4s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .ball-circle {
+    flex-shrink: 0;
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 20px;
+    color: #fff;
+    box-shadow: 0 3px 8px rgba(0,0,0,0.4), inset 0 2px 4px rgba(255,255,255,0.4);
+  }
+
+  .ball-label {
+    color: #fff;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .empty-hint {
+    color: rgba(255,255,255,0.55);
+    text-align: center;
+    margin-top: 20px;
+    font-size: 15px;
+  }
+
+  /* 色定義 */
+  .color-B { background: radial-gradient(circle at 30% 30%, #64b5f6, #1565c0); }
+  .color-I { background: radial-gradient(circle at 30% 30%, #81c784, #2e7d32); }
+  .color-N { background: radial-gradient(circle at 30% 30%, #fff176, #f9a825); color:#3a2c00; }
+  .color-G { background: radial-gradient(circle at 30% 30%, #ffb74d, #ef6c00); }
+  .color-O { background: radial-gradient(circle at 30% 30%, #ef5350, #b71c1c); }
+
+  .text-B { color: #64b5f6; }
+  .text-I { color: #81c784; }
+  .text-N { color: #fff176; }
+  .text-G { color: #ffb74d; }
+  .text-O { color: #ef5350; }
+
+  /* ---------- 紙吹雪キャンバス ---------- */
+  #confettiCanvas {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+  }
+
+  /* ---------- ゲーム終了オーバーレイ ---------- */
+  #endOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.7);
+    backdrop-filter: blur(6px);
+  }
+
+  #endOverlay.show { display: flex; }
+
+  .end-text {
+    font-size: clamp(40px, 7vw, 90px);
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 30px #ffd54f, 0 0 60px #ff8a65;
+    animation: pulseEnd 1.4s ease-in-out infinite;
+    text-align: center;
+  }
+
+  @keyframes pulseEnd {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.06); }
+  }
+
+  /* ---------- 設定モーダル ---------- */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    padding: 20px;
+  }
+
+  .modal-overlay.show { display: flex; }
+
+  .modal {
+    width: min(560px, 100%);
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 28px 30px;
+    color: #fff;
+  }
+
+  .modal-title {
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 2px;
+    margin-bottom: 18px;
+    text-align: center;
+  }
+
+  .modal-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+    color: rgba(255,255,255,0.85);
+    margin: 16px 0 8px 0;
+    letter-spacing: 1px;
+  }
+
+  .modal-input,
+  .modal-textarea,
+  select.modal-input {
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-size: 16px;
+    outline: none;
+    font-family: inherit;
+    resize: vertical;
+  }
+
+  select.modal-input option {
+    color: #111;
+  }
+
+  .voice-hint {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+    margin-top: 6px;
+  }
+
+  .modal-input::placeholder,
+  .modal-textarea::placeholder {
+    color: rgba(255,255,255,0.45);
+  }
+
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .color-picker {
+    width: 56px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.35);
+    background: transparent;
+    padding: 2px;
+    cursor: pointer;
+  }
+
+  .preset-swatches {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .swatch {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.6);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .swatch:active { transform: scale(0.9); }
+
+  .modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 26px;
+  }
+
+  .btn-modal-cancel {
+    background: rgba(255,255,255,0.14);
+    padding: 14px 22px;
+    min-width: auto;
+    font-size: 15px;
+  }
+
+  .btn-modal-save {
+    background: linear-gradient(135deg, rgba(90,200,140,0.9), rgba(50,160,110,0.9));
+    padding: 14px 26px;
+    min-width: auto;
+    font-size: 15px;
+  }
+
+  /* =========================================================
+     レスポンシブ対応（タブレット横向き〜スマホ縦向きまで）
+     ========================================================= */
+  @media (max-width: 900px) {
+    html, body {
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .app {
+      flex-direction: column;
+      height: auto;
+      min-height: 100vh;
+      min-height: 100dvh;
+      padding: 14px;
+      gap: 14px;
+    }
+
+    .left-panel,
+    .right-panel {
+      flex: none;
+      width: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .left-panel {
+      padding: 66px 18px 22px 18px;
+    }
+
+    .right-panel {
+      min-height: 300px;
+      padding: 16px;
+    }
+
+    .history-list {
+      max-height: 42vh;
+      min-height: 0;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .title {
+      font-size: clamp(18px, 6.5vw, 26px);
+      letter-spacing: 2px;
+    }
+
+    .draw-count {
+      font-size: 12px;
+    }
+
+    #currentNumber {
+      font-size: clamp(84px, 34vw, 170px);
+    }
+
+    .left-panel.no-title #currentNumber {
+      font-size: clamp(96px, 38vw, 190px);
+    }
+
+    .letter-badge {
+      font-size: clamp(16px, 5vw, 22px);
+    }
+
+    .controls {
+      gap: 8px;
+    }
+
+    .btn {
+      padding: 14px 16px;
+      font-size: 14px;
+      min-width: 96px;
+      border-radius: 16px;
+    }
+
+    .btn-draw {
+      padding: 16px 22px;
+      font-size: 16px;
+    }
+
+    .corner-btn {
+      width: 40px;
+      height: 40px;
+      font-size: 15px;
+    }
+
+    .right-header {
+      font-size: 16px;
+    }
+
+    .search-input {
+      font-size: 15px;
+      padding: 10px 12px;
+    }
+
+    .ball-circle {
+      width: 44px;
+      height: 44px;
+      font-size: 17px;
+    }
+
+    .ball-label {
+      font-size: 14px;
+    }
+
+    .modal {
+      padding: 20px 16px;
+    }
+
+    .modal-title {
+      font-size: 19px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="overlay-layer" id="overlayLayer"></div>
+
+<div class="corner-buttons">
+  <button class="corner-btn corner-btn-reset" id="resetBtn" title="リセット">🔄</button>
+  <button class="corner-btn corner-btn-settings" id="settingsBtn" title="設定">⚙️</button>
+</div>
+
+<div class="app">
+
+  <!-- 左パネル -->
+  <div class="left-panel glass" id="leftPanel">
+    <div class="title" id="titleEl">BINGO GAME</div>
+    <div class="draw-count" id="drawCount">抽選数：0 / 75</div>
+
+    <div class="number-stage">
+      <div class="letter-badge" id="letterBadge">B</div>
+      <div id="currentNumber">--</div>
+    </div>
+
+    <div class="controls">
+      <button class="btn btn-draw" id="drawBtn">🎲 抽選</button>
+      <button class="btn btn-full" id="fullBtn">📺 全画面</button>
+    </div>
+  </div>
+
+  <!-- 右パネル -->
+  <div class="right-panel glass">
+    <div class="right-header">出た数字</div>
+
+    <div class="search-box">
+      <input type="text" id="searchInput" class="search-input" placeholder="🔍 数字で検索（1〜75）" inputmode="numeric" maxlength="2">
+    </div>
+    <div class="search-status" id="searchStatus"></div>
+
+    <div class="bingo-columns">
+      <span class="text-B">B</span>
+      <span class="text-I">I</span>
+      <span class="text-N">N</span>
+      <span class="text-G">G</span>
+      <span class="text-O">O</span>
+    </div>
+    <div class="history-list" id="historyList">
+      <div class="empty-hint" id="emptyHint">まだ数字は出ていません</div>
+    </div>
+  </div>
+
+</div>
+
+<canvas id="confettiCanvas"></canvas>
+
+<div id="endOverlay">
+  <div class="end-text">🎉 GAME END 🎉</div>
+</div>
+
+<!-- 設定モーダル -->
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal glass">
+    <div class="modal-title">⚙️ 設定</div>
+
+    <label class="modal-label">タイトル（空欄にすると非表示になり、数字表示が少し大きくなります）</label>
+    <input type="text" id="titleInput" class="modal-input" placeholder="例：〇〇忘年会 ビンゴ大会" maxlength="30">
+
+    <label class="modal-label">背景の色合い</label>
+    <div class="color-row">
+      <input type="color" id="bgColorInput" class="color-picker" value="#0a0c1e">
+      <div class="preset-swatches">
+        <button type="button" class="swatch" data-color="#0a0c1e" style="background:#0a0c1e" title="ネイビー"></button>
+        <button type="button" class="swatch" data-color="#ff2fd0" style="background:#ff2fd0" title="ネオンピンク"></button>
+        <button type="button" class="swatch" data-color="#00fff2" style="background:#00fff2" title="ネオンシアン"></button>
+        <button type="button" class="swatch" data-color="#39ff14" style="background:#39ff14" title="ネオングリーン"></button>
+        <button type="button" class="swatch" data-color="#b026ff" style="background:#b026ff" title="ネオンパープル"></button>
+        <button type="button" class="swatch" data-color="#ff6a00" style="background:#ff6a00" title="ネオンオレンジ"></button>
+        <button type="button" class="swatch" data-color="#f9f002" style="background:#f9f002" title="ネオンイエロー"></button>
+        <button type="button" class="swatch" data-color="#000000" style="background:#000000" title="ブラック"></button>
+      </div>
+    </div>
+
+    <label class="modal-label">読み上げ音声</label>
+    <select id="voiceGenderInput" class="modal-input">
+      <option value="auto">自動（端末のおまかせ）</option>
+      <option value="female">女性の声</option>
+      <option value="male">男性の声</option>
+    </select>
+    <div class="voice-hint" id="voiceHint">端末に入っている音声から自動で選びます</div>
+
+    <label class="modal-label">当選時の掛け声（1行に1つ入力。抽選のたびランダムで読み上げます）</label>
+    <textarea id="calloutInput" class="modal-textarea" rows="4" placeholder="わぁ〜い！&#10;やったー！&#10;ナイスビンゴ！"></textarea>
+
+    <div class="modal-buttons">
+      <button class="btn btn-modal-cancel" id="settingsCancelBtn">キャンセル</button>
+      <button class="btn btn-modal-save" id="settingsSaveBtn">保存する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+
+  /* ================= 状態管理 ================= */
+  let pool = [];          // 残りの数字
+  let history = [];       // 抽選済み {num, letter}
+  let drawing = false;
+  let audioCtx = null;
+
+  const DEFAULT_SETTINGS = {
+    title: "",
+    bgColor: "#0a0c1e",
+    callouts: ["わぁ〜い！", "やったー！", "ナイスビンゴ！"],
+    voiceGender: "auto"
+  };
+  let settings = loadSettings();
+
+  const currentNumberEl = document.getElementById("currentNumber");
+  const letterBadgeEl   = document.getElementById("letterBadge");
+  const historyListEl   = document.getElementById("historyList");
+  const emptyHintEl     = document.getElementById("emptyHint");
+  const drawCountEl     = document.getElementById("drawCount");
+  const drawBtn         = document.getElementById("drawBtn");
+  const resetBtn        = document.getElementById("resetBtn");
+  const fullBtn         = document.getElementById("fullBtn");
+  const endOverlay      = document.getElementById("endOverlay");
+  const leftPanelEl     = document.getElementById("leftPanel");
+  const titleEl         = document.getElementById("titleEl");
+  const overlayLayerEl  = document.getElementById("overlayLayer");
+  const searchInput     = document.getElementById("searchInput");
+  const searchStatusEl  = document.getElementById("searchStatus");
+
+  const settingsBtn        = document.getElementById("settingsBtn");
+  const settingsOverlay    = document.getElementById("settingsOverlay");
+  const settingsCancelBtn  = document.getElementById("settingsCancelBtn");
+  const settingsSaveBtn    = document.getElementById("settingsSaveBtn");
+  const titleInput         = document.getElementById("titleInput");
+  const bgColorInput       = document.getElementById("bgColorInput");
+  const calloutInput       = document.getElementById("calloutInput");
+  const voiceGenderInput   = document.getElementById("voiceGenderInput");
+  const swatches           = document.querySelectorAll(".swatch");
+
+  function initPool() {
+    pool = [];
+    for (let i = 1; i <= 75; i++) pool.push(i);
+  }
+
+  function getLetter(n) {
+    if (n <= 15) return "B";
+    if (n <= 30) return "I";
+    if (n <= 45) return "N";
+    if (n <= 60) return "G";
+    return "O";
+  }
+
+  /* ================= 設定：読み込み／保存／反映 ================= */
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem("bingoSettings");
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return Object.assign({}, DEFAULT_SETTINGS, parsed);
+      }
+    } catch (e) { /* 読み込み失敗時はデフォルトを使用 */ }
+    return Object.assign({}, DEFAULT_SETTINGS);
+  }
+
+  function saveSettingsToStorage() {
+    try {
+      localStorage.setItem("bingoSettings", JSON.stringify(settings));
+    } catch (e) { /* 保存できない環境では無視 */ }
+  }
+
+  function hexToRgba(hex, alpha) {
+    const clean = hex.replace("#", "");
+    const r = parseInt(clean.substring(0, 2), 16);
+    const g = parseInt(clean.substring(2, 4), 16);
+    const b = parseInt(clean.substring(4, 6), 16);
+    return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+  }
+
+  function applySettings() {
+    // タイトル表示／非表示
+    const t = (settings.title || "").trim();
+    if (t !== "") {
+      titleEl.textContent = t;
+      leftPanelEl.classList.remove("no-title");
+    } else {
+      titleEl.textContent = "";
+      leftPanelEl.classList.add("no-title");
+    }
+    // 背景の色合い
+    const color = settings.bgColor || "#0a0c1e";
+    overlayLayerEl.style.background = hexToRgba(color, 0.5);
+    // パネルやボタンの縁に同系色のネオン発光を反映
+    document.documentElement.style.setProperty("--accent-glow", hexToRgba(color, 0.45));
+  }
+
+  function openSettings() {
+    titleInput.value = settings.title || "";
+    bgColorInput.value = settings.bgColor || "#0a0c1e";
+    calloutInput.value = (settings.callouts || []).join("\n");
+    voiceGenderInput.value = settings.voiceGender || "auto";
+    settingsOverlay.classList.add("show");
+  }
+
+  function closeSettings() {
+    settingsOverlay.classList.remove("show");
+  }
+
+  settingsBtn.addEventListener("click", openSettings);
+  settingsCancelBtn.addEventListener("click", closeSettings);
+  settingsOverlay.addEventListener("click", (e) => {
+    if (e.target === settingsOverlay) closeSettings();
+  });
+
+  swatches.forEach(sw => {
+    sw.addEventListener("click", () => {
+      bgColorInput.value = sw.getAttribute("data-color");
+    });
+  });
+
+  settingsSaveBtn.addEventListener("click", () => {
+    settings.title = titleInput.value.trim();
+    settings.bgColor = bgColorInput.value;
+    settings.callouts = calloutInput.value
+      .split("\n")
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+    settings.voiceGender = voiceGenderInput.value;
+    saveSettingsToStorage();
+    applySettings();
+    closeSettings();
+  });
+
+  /* ================= Web Audio ================= */
+  function ensureAudio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+
+  // 抽選開始/切替時の「ピッ」
+  function playPip() {
+    const ctx = ensureAudio();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.09);
+  }
+
+  // 決定時の「ジャーン」
+  function playJaan() {
+    const ctx = ensureAudio();
+    const now = ctx.currentTime;
+    const freqs = [523.25, 659.25, 783.99, 1046.5]; // C E G C（明るい和音）
+    freqs.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "triangle";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(0.18, now + 0.03 + i * 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now);
+      osc.stop(now + 1.3);
+    });
+  }
+
+  // ゲーム終了音
+  function playEndChime() {
+    const ctx = ensureAudio();
+    const now = ctx.currentTime;
+    const freqs = [392, 523.25, 659.25, 523.25, 783.99];
+    freqs.forEach((f, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = f;
+      const t0 = now + i * 0.22;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.linearRampToValueAtTime(0.2, t0 + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.55);
+    });
+  }
+
+  /* ================= 読み上げ音声（男性／女性） ================= */
+  let availableVoices = [];
+
+  function refreshVoices() {
+    if ("speechSynthesis" in window) {
+      availableVoices = window.speechSynthesis.getVoices();
+    }
+  }
+  refreshVoices();
+  if ("speechSynthesis" in window && "onvoiceschanged" in window.speechSynthesis) {
+    window.speechSynthesis.onvoiceschanged = refreshVoices;
+  }
+
+  const FEMALE_NAME_PATTERN = /kyoko|o-ren|oren|sayaka|haruka|female|女性/i;
+  const MALE_NAME_PATTERN   = /otoya|hattori|ichiro|male|男性/i;
+
+  function pickVoice(genderPref) {
+    if (!genderPref || genderPref === "auto") return null;
+    if (!availableVoices || availableVoices.length === 0) return null;
+
+    const jaVoices = availableVoices.filter(v => v.lang && v.lang.toLowerCase().indexOf("ja") === 0);
+    const pool = jaVoices.length > 0 ? jaVoices : availableVoices;
+
+    const pattern = genderPref === "female" ? FEMALE_NAME_PATTERN : MALE_NAME_PATTERN;
+    let match = pool.find(v => pattern.test(v.name));
+    if (match) return match;
+
+    // 名前から判別できない場合は、候補の中から順番に割り当てる（女性=1番目、男性=2番目 or 1番目）
+    if (pool.length >= 2) {
+      return genderPref === "female" ? pool[0] : pool[1];
+    }
+    return pool[0] || null;
+  }
+
+  // iOS Safari対策：タップ直後の同期呼び出しで読み上げ機能を「解放」しておく
+  function primeSpeech() {
+    if (!("speechSynthesis" in window)) return;
+    try {
+      const primer = new SpeechSynthesisUtterance("");
+      primer.volume = 0;
+      window.speechSynthesis.speak(primer);
+    } catch (e) { /* 無視 */ }
+  }
+
+  function speak(text) {
+    if (!("speechSynthesis" in window)) return;
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = "ja-JP";
+    utter.rate = 1.0;
+    utter.pitch = 1.05;
+    const voice = pickVoice(settings.voiceGender);
+    if (voice) utter.voice = voice;
+    window.speechSynthesis.speak(utter);
+  }
+
+  /* ================= 履歴表示／検索 ================= */
+  function renderHistory(filterQuery) {
+    const q = filterQuery || "";
+    historyListEl.innerHTML = "";
+
+    const list = q
+      ? history.filter(item => String(item.num).indexOf(q) !== -1)
+      : history;
+
+    if (list.length === 0) {
+      const hint = document.createElement("div");
+      hint.className = "empty-hint";
+      hint.textContent = (history.length === 0)
+        ? "まだ数字は出ていません"
+        : "一致する数字はありません";
+      historyListEl.appendChild(hint);
+    } else {
+      list.forEach(item => {
+        const ball = document.createElement("div");
+        ball.className = "ball";
+        ball.innerHTML =
+          '<div class="ball-circle color-' + item.letter + '">' + item.num + '</div>' +
+          '<div class="ball-label">' + item.letter + ' ' + item.num + '</div>';
+        historyListEl.appendChild(ball);
+      });
+    }
+    drawCountEl.textContent = "抽選数：" + history.length + " / 75";
+  }
+
+  function applySearch() {
+    const q = searchInput.value.trim();
+    renderHistory(q);
+
+    if (q === "") {
+      searchStatusEl.textContent = "";
+      searchStatusEl.className = "search-status";
+      return;
+    }
+
+    const n = parseInt(q, 10);
+    if (isNaN(n) || n < 1 || n > 75) {
+      searchStatusEl.textContent = "1〜75の数字を入力してください";
+      searchStatusEl.className = "search-status warn";
+      return;
+    }
+
+    const found = history.find(h => h.num === n);
+    if (found) {
+      searchStatusEl.textContent = "◎ " + found.letter + found.num + " は抽選済みです";
+      searchStatusEl.className = "search-status found";
+    } else {
+      searchStatusEl.textContent = "△ " + n + " はまだ出ていません";
+      searchStatusEl.className = "search-status notfound";
+    }
+  }
+
+  searchInput.addEventListener("input", applySearch);
+
+  /* ================= 抽選ロジック ================= */
+  function drawNumber() {
+    if (drawing) return;
+    if (pool.length === 0) return;
+
+    drawing = true;
+    drawBtn.disabled = true;
+    ensureAudio();
+    primeSpeech();
+
+    currentNumberEl.classList.add("rolling");
+    currentNumberEl.classList.remove("win", "glow");
+    letterBadgeEl.classList.remove("show");
+    ["text-B","text-I","text-N","text-G","text-O"].forEach(c => currentNumberEl.classList.remove(c));
+
+    const startTime = performance.now();
+    const duration = 1200;
+    let lastTick = 0;
+
+    function tick(now) {
+      const elapsed = now - startTime;
+      if (now - lastTick > 45) {
+        lastTick = now;
+        const randomShow = pool[Math.floor(Math.random() * pool.length)];
+        currentNumberEl.textContent = randomShow;
+        playPip();
+      }
+      if (elapsed < duration) {
+        requestAnimationFrame(tick);
+      } else {
+        finishDraw();
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function finishDraw() {
+    const idx = Math.floor(Math.random() * pool.length);
+    const num = pool.splice(idx, 1)[0];
+    const letter = getLetter(num);
+
+    currentNumberEl.classList.remove("rolling");
+    currentNumberEl.textContent = num;
+    currentNumberEl.classList.add("text-" + letter, "glow");
+
+    // アニメーション再起動のためのリフロー
+    void currentNumberEl.offsetWidth;
+    currentNumberEl.classList.add("win");
+
+    letterBadgeEl.textContent = letter;
+    letterBadgeEl.className = "letter-badge show text-" + letter;
+
+    playJaan();
+    speak(num + "番！");
+
+    // 掛け声（設定されている場合のみ、番号の読み上げに続けて再生）
+    if (settings.callouts && settings.callouts.length > 0) {
+      const callout = settings.callouts[Math.floor(Math.random() * settings.callouts.length)];
+      setTimeout(() => speak(callout), 1300);
+    }
+
+    launchConfetti(letter);
+
+    history.unshift({ num, letter });
+    applySearch();
+
+    drawing = false;
+
+    if (pool.length === 0) {
+      setTimeout(() => {
+        endOverlay.classList.add("show");
+        playEndChime();
+        speak("ビンゴゲーム終了です");
+      }, 900);
+      drawBtn.disabled = true;
+    } else {
+      drawBtn.disabled = false;
+    }
+  }
+
+  function resetGame() {
+    window.speechSynthesis && window.speechSynthesis.cancel();
+    initPool();
+    history = [];
+    drawing = false;
+    currentNumberEl.textContent = "--";
+    currentNumberEl.className = "";
+    letterBadgeEl.className = "letter-badge";
+    letterBadgeEl.textContent = "B";
+    drawBtn.disabled = false;
+    endOverlay.classList.remove("show");
+    searchInput.value = "";
+    applySearch();
+  }
+
+  /* ---------- リセットボタン：誤操作防止（2回タップで確定） ---------- */
+  let resetArmed = false;
+  let resetArmTimer = null;
+
+  resetBtn.addEventListener("click", () => {
+    if (!resetArmed) {
+      resetArmed = true;
+      resetBtn.classList.add("armed");
+      resetBtn.textContent = "確定?";
+      resetArmTimer = setTimeout(() => {
+        resetArmed = false;
+        resetBtn.classList.remove("armed");
+        resetBtn.textContent = "🔄";
+      }, 3000);
+    } else {
+      clearTimeout(resetArmTimer);
+      resetArmed = false;
+      resetBtn.classList.remove("armed");
+      resetBtn.textContent = "🔄";
+      resetGame();
+    }
+  });
+
+  /* ================= 紙吹雪（Canvas実装） ================= */
+  const confettiCanvas = document.getElementById("confettiCanvas");
+  const cctx = confettiCanvas.getContext("2d");
+  let confettiParticles = [];
+  let confettiAnimId = null;
+
+  function resizeCanvas() {
+    confettiCanvas.width = window.innerWidth;
+    confettiCanvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener("resize", resizeCanvas);
+
+  const confettiColors = {
+    B: "#42a5f5", I: "#66bb6a", N: "#ffee58", G: "#ffa726", O: "#ef5350"
+  };
+
+  function launchConfetti(letter) {
+    const baseColor = confettiColors[letter] || "#ffffff";
+    const palette = [baseColor, "#ffffff", "#ffd54f", "#ff8a65", "#4fc3f7"];
+    const count = 140;
+    for (let i = 0; i < count; i++) {
+      confettiParticles.push({
+        x: confettiCanvas.width / 2 + (Math.random() - 0.5) * 200,
+        y: confettiCanvas.height * 0.35 + (Math.random() - 0.5) * 100,
+        vx: (Math.random() - 0.5) * 10,
+        vy: Math.random() * -8 - 4,
+        gravity: 0.28 + Math.random() * 0.12,
+        size: 6 + Math.random() * 8,
+        rot: Math.random() * 360,
+        vrot: (Math.random() - 0.5) * 14,
+        color: palette[Math.floor(Math.random() * palette.length)],
+        life: 0,
+        maxLife: 140 + Math.random() * 40
+      });
+    }
+    if (!confettiAnimId) confettiLoop();
+  }
+
+  function confettiLoop() {
+    cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+    confettiParticles.forEach(p => {
+      p.vy += p.gravity * 0.15;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vrot;
+      p.life++;
+
+      cctx.save();
+      cctx.translate(p.x, p.y);
+      cctx.rotate((p.rot * Math.PI) / 180);
+      const alpha = Math.max(0, 1 - p.life / p.maxLife);
+      cctx.globalAlpha = alpha;
+      cctx.fillStyle = p.color;
+      cctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+      cctx.restore();
+    });
+
+    confettiParticles = confettiParticles.filter(p => p.life < p.maxLife && p.y < confettiCanvas.height + 40);
+
+    if (confettiParticles.length > 0) {
+      confettiAnimId = requestAnimationFrame(confettiLoop);
+    } else {
+      cctx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      confettiAnimId = null;
+    }
+  }
+
+  /* ================= 全画面 ================= */
+  function toggleFullscreen() {
+    const el = document.documentElement;
+    const isFull = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!isFull) {
+      if (el.requestFullscreen) {
+        el.requestFullscreen().catch(() => {});
+      } else if (el.webkitRequestFullscreen) {
+        el.webkitRequestFullscreen();
+      } else {
+        alert("このブラウザでは全画面表示に対応していません。");
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitExitFullscreen) {
+        document.webkitExitFullscreen();
+      }
+    }
+  }
+
+  /* ================= イベント登録 ================= */
+  drawBtn.addEventListener("click", drawNumber);
+  fullBtn.addEventListener("click", toggleFullscreen);
+
+  /* ================= 初期化 ================= */
+  initPool();
+  applySettings();
+  renderHistory();
+})();
+</script>
+
+</body>
+</html>
